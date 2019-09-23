@@ -1,5 +1,10 @@
 load("//python:python_grpc_compile.bzl", "python_grpc_compile")
 
+load(
+    "@com_bluecore_rules_pyz//rules_python_zip:rules_python_zip.bzl",
+    "pyz_library",
+)
+
 def python_grpc_library(**kwargs):
     # Compile protos
     name_pb = kwargs.get("name") + "_pb"
@@ -18,13 +23,13 @@ def python_grpc_library(**kwargs):
 
 
     # Create python library
-    native.py_library(
+    pyz_library(
         name = kwargs.get("name"),
         srcs = [name_pb],
         deps = [
             "@com_google_protobuf//:protobuf_python",
         ] + grpc_deps,
-        imports = [name_pb],
+        # imports = [name_pb],
         visibility = kwargs.get("visibility"),
     )
 

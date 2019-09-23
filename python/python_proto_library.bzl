@@ -1,5 +1,10 @@
 load("//python:python_proto_compile.bzl", "python_proto_compile")
 
+load(
+    "@com_bluecore_rules_pyz//rules_python_zip:rules_python_zip.bzl",
+    "pyz_library",
+)
+
 def python_proto_library(**kwargs):
     # Compile protos
     name_pb = kwargs.get("name") + "_pb"
@@ -9,14 +14,15 @@ def python_proto_library(**kwargs):
     )
 
     # Create python library
-    native.py_library(
+    pyz_library(
         name = kwargs.get("name"),
         srcs = [name_pb],
         deps = PROTO_DEPS,
-        imports = [name_pb],
+        pythonroot = name_pb,
         visibility = kwargs.get("visibility"),
     )
 
 PROTO_DEPS = [
-    "@com_google_protobuf//:protobuf_python",
+    # "@com_google_protobuf//:protobuf_python",
+    "//third_party/pypi:protobuf",
 ]
