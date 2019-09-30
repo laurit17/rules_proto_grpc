@@ -1,0 +1,191 @@
+diff --git a/pypi/pip_generate.go b/pypi/pip_generate.go
+index ada122f..737f0f3 100644
+--- a/pypi/pip_generate.go
++++ b/pypi/pip_generate.go
+@@ -102,8 +102,6 @@ func (w *wheelInfo) makeBazelRule(name *string, wheelDir *string) string {
+ 		output += fmt.Sprintf("    native.filegroup(\n")
+ 		output += fmt.Sprintf("        name=\"%s\",\n", *name)
+ 		output += fmt.Sprintf("        srcs=[\"%s\"],\n", path.Join(*wheelDir, filepath.Base(w.filePath)))
+-		// Fixes build error TODO: different type? comment that this is not the right license?
+-		output += fmt.Sprintf("        licenses=[\"notice\"],\n")
+ 		output += fmt.Sprintf("    )\n")
+ 	} else {
+ 		output += fmt.Sprintf("    if \"%s\" not in existing_rules:\n", *name)
+@@ -556,8 +554,6 @@ func main() {
+ 			fmt.Fprintf(outputBzlFile, "        }),\n")
+ 		}
+
+-		// Fixes build error TODO: different type? comment that this is not the right license?
+-		fmt.Fprintf(outputBzlFile, "        licenses=[\"notice\"],\n")
+ 		fmt.Fprintf(outputBzlFile, "        visibility=[\"//visibility:public\"],\n")
+ 		fmt.Fprintf(outputBzlFile, "    )\n")
+
+@@ -590,8 +586,6 @@ func main() {
+ 				fmt.Fprintf(outputBzlFile, "            \"%s\",\n", pyPIToBazelPackageName(dep))
+ 			}
+ 			fmt.Fprintf(outputBzlFile, "        ],\n")
+-			// fmt.Fprintf(outputBzlFile, "        # Not the correct license but fixes a build error\n")
+-			fmt.Fprintf(outputBzlFile, "        licenses=[\"notice\"],\n")
+ 			fmt.Fprintf(outputBzlFile, "        visibility=[\"//visibility:public\"],\n")
+ 			fmt.Fprintf(outputBzlFile, "    )\n")
+ 		}
+diff --git a/pypi/wheeltool.py b/pypi/wheeltool.py
+index c04db73..c630a27 100755
+--- a/pypi/wheeltool.py
++++ b/pypi/wheeltool.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python
++#!/usr/bin/env python
+ # Copyright 2017 The Bazel Authors. All rights reserved.
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");
+@@ -23,10 +23,13 @@ import os
+ import pkg_resources
+ from pkg_resources._vendor.packaging import markers
+ import re
+-import rfc822
+ import sys
+ import zipfile
+
++try:
++  basestring
++except NameError:
++  basestring = str
+
+ def recurse_split_extra(parsed_parts):
+   extra = ''
+@@ -186,16 +189,25 @@ class Wheel(object):
+   def _parse_metadata(self, file_object):
+     # the METADATA file is in PKG-INFO format, which is a sequence of RFC822 headers:
+     # https://www.python.org/dev/peps/pep-0241/
+-    message = rfc822.Message(file_object)
+
+     # Requires-Dist format:
+     # https://packaging.python.org/specifications/core-metadata/#requires-dist-multiple-use
++    try:
++        specifications = []
++        import rfc822
++        message = rfc822.Message(file_object)
++        for header in message.getallmatchingheaders('Requires-Dist'):
++            header_parts = header.strip().split(':', 2)
++            specifications.append(header_parts[1].strip())
++    except ImportError:
++        # Use the email module if rfc822 does not exist (It was removed in Python3)
++        import email
++        message =  email.parser.BytesParser().parse(file_object)
++        specifications = message.get_all('Requires-Dist') or []
++
+     requires_extra = {}
+     extras = set()
+-    for header in message.getallmatchingheaders('Requires-Dist'):
+-      header_parts = header.strip().split(':', 2)
+-      specification = header_parts[1].strip()
+-
++    for specification in specifications:
+       package_and_version = specification
+       environment_marker = ''
+       extra = ''
+diff --git a/rules_python_zip/main_template.py b/rules_python_zip/main_template.py
+old mode 100644
+new mode 100755
+index e49a2a9..e6bd9fa
+--- a/rules_python_zip/main_template.py
++++ b/rules_python_zip/main_template.py
+@@ -48,6 +48,9 @@ def main():
+     manifest = json.loads(MANIFEST_JSON)
+     if manifest['entry_point']:
+         import runpy
++        if os.environ.get("BAZEL_COVERAGE", "0") == "1":
++            from tools.coverage import coverage_wrapper
++            coverage_wrapper.setup_coverage()
+         # must use str to convert the entry point from unicode to str
+         runpy.run_module(str(manifest['entry_point']), run_name='__main__')
+         sys.exit(0)
+diff --git a/rules_python_zip/rules_python_zip.bzl b/rules_python_zip/rules_python_zip.bzl
+index 7125abe..0ab306c 100644
+--- a/rules_python_zip/rules_python_zip.bzl
++++ b/rules_python_zip/rules_python_zip.bzl
+@@ -27,16 +27,11 @@ _pyz_attrs = {
+
+     "data": attr.label_list(
+         allow_files = True,
+-        cfg = "data",
+     ),
+
+     # this target's direct files must be unzipped to be executed. This is usually
+     # because Python code relies on __file__ relative paths existing.
+     "zip_safe": attr.bool(default = True),
+-
+-    # required so the rules can be used in third_party without error:
+-    # third-party rule '//third_party/pypi:example' lacks a license declaration
+-    "licenses": attr.license(),
+ }
+
+ def get_pythonroot(ctx):
+@@ -240,7 +235,7 @@ def _pyz_binary_impl(ctx):
+     )
+
+     # by default: only build the executable script and runfiles tree
+-    return [DefaultInfo(
++    return [provider, DefaultInfo(
+         files=depset(direct=[ctx.outputs.executable]),
+         runfiles=runfiles
+     )]
+@@ -322,9 +317,12 @@
+         files=[ctx.outputs.executable],
+         collect_data = True,
+     )
+-    return [DefaultInfo(
+-        runfiles=runfiles
+-    )]
++    return struct(
++        runfiles=runfiles,
++        instrumented_files=struct(
++            source_attrtibutes=["srcs"],
++            ),
++        )
+
+
+ _pyz_script_test = rule(
+@@ -339,16 +337,13 @@ _pyz_script_test = rule(
+             default="//rules_python_zip:pytest_template.sh",
+             allow_single_file=True,
+         ),
+-
+-        # required so the pyz_test can be used in third_party without error
+-        "licenses": attr.license(),
+     }),
+     executable = True,
+     test = True,
+ )
+
+ def pyz_test(name, srcs=[], data=[], deps=[], pythonroot=None,
+-    force_all_unzip=False, interpreter_path=None, flaky=None, licenses=[],
++    force_all_unzip=False, interpreter_path=None, flaky=None,
+     local=None, timeout=None, shard_count=None, size=None, tags=[], args=[]):
+     '''Macro that outputs a pyz_binary with all the test code and executes it with a shell script
+     to pass the correct arguments.'''
+@@ -363,7 +358,6 @@ def pyz_test(name, srcs=[], data=[], deps=[], pythonroot=None,
+         deps = deps,
+         pythonroot = pythonroot,
+         testonly = True,
+-        licenses = licenses,
+     )
+
+     test_executable_name = "%s_exe" % (name)
+@@ -375,7 +369,6 @@ def pyz_test(name, srcs=[], data=[], deps=[], pythonroot=None,
+         interpreter_path = interpreter_path,
+         force_all_unzip = force_all_unzip,
+         testonly = True,
+-        licenses = licenses,
+     )
+
+     _pyz_script_test(
+@@ -385,7 +378,6 @@ def pyz_test(name, srcs=[], data=[], deps=[], pythonroot=None,
+         pythonroot = pythonroot,
+         test_executable = test_executable_name,
+         testonly = True,
+-        licenses = licenses,
+
+         flaky = flaky,
+         local = local,

@@ -1,3 +1,39 @@
+load("//python:defs.bzl", "python_grpc_library", "python_proto_compile", "python_proto_library", "pyz_proto_library")
+
+pyz_proto_library(
+    name = "person_pyz_proto",
+    deps = [":person_proto"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+pyz_proto_library(
+    name = "place_pyz_proto",
+    deps = [":place_proto"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+pyz_proto_library(
+    name = "foo_pyz_proto",
+    deps = [":foo_proto"],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+proto_library(
+    name = "foo_proto",
+    srcs = [
+        "foo.proto",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
 proto_library(
     name = "person_proto",
     srcs = [

@@ -340,3 +340,22 @@ go_repository(
     commit = "44cb242eeb4d76cc813fdc69ba5c4b224677e799",
     importpath = "github.com/urfave/cli",
 )
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# Load the dependencies required for the rules
+http_archive(
+    name = "com_bluecore_rules_pyz",
+    patch_args = ["-p1"],
+    patches = ["//third_party:com_bluecore_rules_pyz.patch"],
+    sha256 = "39d4ae793ea0bf4b8e2b7d8c0f20cd128d1b73669a693c398ebba30a2742952e",
+    strip_prefix = "rules_pyz-d434fb7a23d8e24279fb6f5ff766860291440cd8",
+    urls = [
+        "https://artifacts.int.uberatc.com/artifactory/third-party-mirror/github.com/TriggerMail/rules_pyz/archive/d434fb7a23d8e24279fb6f5ff766860291440cd8.tar.gz",
+        "https://github.com/TriggerMail/rules_pyz/archive/d434fb7a23d8e24279fb6f5ff766860291440cd8.tar.gz",
+    ],
+)
+
+load("@com_bluecore_rules_pyz//rules_python_zip:rules_python_zip.bzl", "pyz_repositories")
+
+pyz_repositories()

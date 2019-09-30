@@ -1,7 +1,45 @@
-load("//python:defs.bzl", "python_grpc_library", "python_proto_compile")
+load("//python:defs.bzl", "python_grpc_library", "python_proto_compile", "python_proto_library", "pyz_proto_library")
+load(
+    "@com_bluecore_rules_pyz//rules_python_zip:rules_python_zip.bzl",
+    "pyz_binary",
+    "pyz_library",
+    "pyz_test",
+)
+
+pyz_binary(
+    name = "hello_bin",
+    deps = [
+        ":hello",
+        "//example/proto:person_pyz_proto",
+        "//example/proto:place_pyz_proto",
+        "//example/proto:foo_pyz_proto"
+    ],
+    srcs = ["hello_bin.py"],
+)
+
+pyz_library(
+    name = "hello",
+    srcs = ["hello.py"],
+)
 
 python_proto_compile(
     name = "person",
+    deps = ["//example/proto:person_proto"],
+)
+
+python_proto_library(
+    name = "person_py_proto",
+    deps = ["//example/proto:person_proto"],
+)
+
+pyz_proto_library(
+    name = "person_pyz_proto",
+    deps = ["//example/proto:person_proto"],
+    verbose = 4,
+)
+
+cc_proto_library(
+    name = "person_cc_proto",
     deps = ["//example/proto:person_proto"],
 )
 

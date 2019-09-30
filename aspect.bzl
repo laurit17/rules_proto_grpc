@@ -46,10 +46,12 @@ proto_compile_aspect_attrs = {
 
 
 def proto_compile_impl(ctx):
+    print("Now proto_compile_impl is run on " + ctx.label.name)
     # Aggregate output filesand dirs created by the aspect as it has walked the deps
     output_files = [dep[ProtoLibraryAspectNodeInfo].output_files for dep in ctx.attr.deps]
     output_dirs = [d for dirs in [dep[ProtoLibraryAspectNodeInfo].output_dirs for dep in ctx.attr.deps] for d in dirs]
 
+    print(output_files)
     # Check merge_directories and prefix_path
     if not ctx.attr.merge_directories and ctx.attr.prefix_path:
         fail('Attribute prefix_path cannot be set when merge_directories is false')
@@ -58,6 +60,7 @@ def proto_compile_impl(ctx):
     final_output_files = {}
     final_output_dirs = []
     prefix_path = ctx.attr.prefix_path
+
 
     if not ctx.attr.merge_directories:
         # Pass on outputs directly when not merging
@@ -132,14 +135,19 @@ def proto_compile_impl(ctx):
                     if prefix_path:
                         path = prefix_path + '/' + path
 
+                    print(file.path)
+                    print(root)
+                    print(path)
+                    filename = path.split('/')[-1]
+
                     # Copy file to output
                     final_output_files[output_root].append(copy_file(
-                        ctx, file,
-                        "{}/{}".format(ctx.label.name, path)
+                        ctx, file,  filename
                     ))
 
     # Create default and proto compile providers
     all_outputs = [f for files in final_output_files.values() for f in files] + final_output_dirs
+    print(all_outputs)
     return [
         ProtoCompileInfo(
             label = ctx.label,
